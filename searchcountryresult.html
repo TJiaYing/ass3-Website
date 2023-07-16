@@ -4,24 +4,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Country Info</title>
+  <title>Country Info App - Result</title>
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-</head>
-
-<style>
+  <style>
     body {
       background: url('background.avif') no-repeat center center fixed;
       background-size: cover;
     }
   </style>
+</head>
 
 <body>
   <div class="container mt-5">
+    <!-- Result section -->
     <div class="row">
       <div class="col-md-6 offset-md-3" id="result">
         <!-- Country information will be dynamically inserted here -->
       </div>
     </div>
+    <!-- Back button -->
     <div class="row mt-3">
       <div class="col-md-6 offset-md-3">
         <button class="btn btn-primary" onclick="goBack()">Back</button>
@@ -32,48 +33,84 @@
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script>
     function fetchCountryData() {
-      // Get the country name from the query parameter
+      // Get the country names from the query parameter
       const urlParams = new URLSearchParams(window.location.search);
-      const countryName = urlParams.get('country');
+      const countryNames = urlParams.getAll('country');
 
-      if (!countryName) {
-        // If country name is not provided, redirect to the search page
+      if (!countryNames || countryNames.length === 0) {
+        // If country names are not provided, redirect to the search page
         window.location.href = 'searchcountry.html';
         return;
       }
 
-      const url = `https://restcountries.com/v3.1/name/${countryName}`;
-      $.ajax({
-        url: url,
-        method: 'GET',
-        dataType: 'json',
-        success: function (jsonResponse) {
-          const countryData = jsonResponse[0];
-          displayCountryData(countryData);
-        },
-        error: function () {
-          displayErrorMessage('Country not found');
+      // Fetch data for each country in parallel using Promise.all
+      const requests = countryNames.map(countryName => {
+        const url = `https://restcountries.com/v3.1/name/${countryName}`;
+        return $.ajax({
+          url: url,
+          method: 'GET',
+          dataType: 'json'
+        });
+      });
+
+      Promise.all(requests)
+        .then(countryResponses => {
+          const countryDataList = countryResponses.map(response => response[0]);
+          displayCountryData(countryDataList);
+        })
+        .catch(error => {
+          displayErrorMessage('Error fetching country data');
+        });
+    }
+
+    function displayCountryData(countryDataList) {
+      const countryInfoDiv = $('#result');
+
+      // Clear the div content before appending new data
+      countryInfoDiv.empty();
+
+      countryDataList.forEach(countryData => {
+        const countryCode = countryData.cca2.toUpperCase();
+        const flagUrl = `https://flagsapi.com/${countryCode}/flat/64.png`;
+        const populationDensity = calculatePopulationDensity(countryData);
+
+        let languagesHtml = '';
+        // Loop to iterate over the languages spoken in each country
+        for (const language in countryData.languages) {
+          if (Object.hasOwnProperty.call(countryData.languages, language)) {
+            languagesHtml += `<li>${countryData.languages[language]}</li>`;
+          }
         }
+
+        countryInfoDiv.append(`
+          <div class="card mb-3">
+            <div class="card-body">
+              <h2>${countryData.name.common}</h2>
+              <img src="${flagUrl}" alt="Flag" class="img-fluid">
+              <p>Capital: ${countryData.capital[0]}</p>
+              <p>Region: ${countryData.region}</p>
+              <p>Subregion: ${countryData.subregion}</p>
+              <p>Population: ${countryData.population}</p>
+              <p>Area: ${countryData.area} km²</p>
+              <p>Population Density: ${populationDensity} people/km²</p>
+              <p>Languages:</p>
+              <ul>
+                ${languagesHtml}
+              </ul>
+            </div>
+          </div>
+        `);
       });
     }
 
-    function displayCountryData(countryData) {
-      const countryInfoDiv = $('#result');
-      const countryCode = countryData.cca2.toUpperCase();
-      const flagUrl = `https://flagsapi.com/${countryCode}/flat/64.png`;
-      countryInfoDiv.html(`
-        <div class="card">
-          <div class="card-body">
-            <h2>${countryData.name.common}</h2>
-            <img src="${flagUrl}" alt="Flag" class="img-fluid">
-            <p>Capital: ${countryData.capital[0]}</p>
-            <p>Region: ${countryData.region}</p>
-            <p>Subregion: ${countryData.subregion}</p>
-            <p>Population: ${countryData.population}</p>
-            <p>Area: ${countryData.area} km²</p>
-          </div>
-        </div>
-      `);
+    function calculatePopulationDensity(countryData) {
+      // Assuming population is provided as a number, and area is provided as a number in km²
+      const population = parseFloat(countryData.population);
+      const area = parseFloat(countryData.area);
+      if (isNaN(population) || isNaN(area) || area === 0) {
+        return 'N/A';
+      }
+      return (population / area).toFixed(2);
     }
 
     function displayErrorMessage(message) {
